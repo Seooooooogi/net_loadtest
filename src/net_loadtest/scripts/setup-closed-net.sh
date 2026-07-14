@@ -190,12 +190,9 @@ EOF
         [[ -f "${bashrc}" ]] && sed -i "/${BEGIN_MARK}/,/${END_MARK}/d" "${bashrc}"
         {
             echo "${BEGIN_MARK}"
-            echo "# TP-Link 폐쇄망 FastDDS whitelist (setup-closed-net.sh 관리 — 수동 편집 금지)"
-            echo "# FastDDS 는 ROS2 Humble 기본 RMW 지만, 이 호스트가 CycloneDDS 로 override 돼 있을 수"
-            echo "# 있어 명시적으로 고정 (profiles 파일은 FastDDS 만 읽음). 기존 cyclonedds 블록보다 뒤 → 우선."
             echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
             echo "export FASTRTPS_DEFAULT_PROFILES_FILE=\"${FASTDDS_XML}\""
-            echo "export FASTDDS_DEFAULT_PROFILES_FILE=\"${FASTDDS_XML}\"  # Fast DDS 3.x 이름"
+            echo "export FASTDDS_DEFAULT_PROFILES_FILE=\"${FASTDDS_XML}\""
             echo "${END_MARK}"
         } >> "${bashrc}"
     fi

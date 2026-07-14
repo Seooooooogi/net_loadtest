@@ -20,9 +20,16 @@ SNMP 가 없어 각 호스트가 자기 포트의 wire-level tx/rx 를 보고한
 ## Quick start
 
 ```bash
+# 1) clone + colcon build
+git clone git@github.com:Seooooooogi/net_loadtest.git ~/net_loadtest_ws   # private repo (SSH)
 cd ~/net_loadtest_ws
 colcon build --packages-select net_loadtest
 source install/setup.bash
+
+# 2) 폐쇄망 고정 IP + FastDDS whitelist — 각 호스트에서 자기 옥텟 지정 (x = 1..5)
+./src/net_loadtest/scripts/setup-closed-net.sh 3        # 먼저 --dry-run 으로 확인 권장
+source ~/.bashrc                                        # FastDDS whitelist/RMW 반영
+#   옵션: --iface enp3s0 | --ip-only | --dds-only | -y(확인 생략)
 ```
 
 역할별 실행(요약):
