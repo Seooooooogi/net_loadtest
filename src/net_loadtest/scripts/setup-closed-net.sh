@@ -151,12 +151,6 @@ setup_dds(){
         local tmp; tmp="$(TMPDIR="$(dirname "${FASTDDS_XML}")" mktemp)"
         cat > "${tmp}" <<EOF
 <?xml version="1.0" encoding="UTF-8" ?>
-<!-- net_loadtest 폐쇄망 whitelist. Fast DDS 2.x (Humble/Jazzy) 대상.
-     Fast DDS 3.x 는 interfaceWhiteList → interfaces/allowlist 로 개명됨.
-     interfaceWhiteList 는 '로컬' 인터페이스만 필터 → 각 호스트는 자기 IP(+127.0.0.1) 만 매칭,
-     동일 파일을 5대 전부에 배포 가능. useBuiltinTransports=false 로 whitelisted UDP 만 사용
-     (타 NIC 차단). 127.0.0.1 = 같은 호스트 노드/데몬 통신 보존용.
-     setup-closed-net.sh 관리 — 수동 편집 금지. -->
 <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
   <profiles>
     <transport_descriptors>
