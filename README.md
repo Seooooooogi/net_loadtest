@@ -21,7 +21,7 @@ SNMP 가 없어 각 호스트가 자기 포트의 wire-level tx/rx 를 보고한
 
 ```bash
 # 1) clone + colcon build
-git clone git@github.com:Seooooooogi/net_loadtest.git ~/net_loadtest_ws   # private repo (SSH)
+git clone https://github.com/Seooooooogi/net_loadtest.git ~/net_loadtest_ws   # private repo (인증 필요)
 cd ~/net_loadtest_ws
 colcon build --packages-select net_loadtest
 source install/setup.bash
