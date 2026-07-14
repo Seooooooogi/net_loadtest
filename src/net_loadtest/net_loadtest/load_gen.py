@@ -20,6 +20,7 @@ from std_msgs.msg import String
 
 from net_loadtest import packet
 from net_loadtest.rates import rate_hz
+from net_loadtest.runner import on_shutdown_flag, spin as run_spin
 
 
 class LoadGen(Node):
@@ -60,6 +61,8 @@ class LoadGen(Node):
         try:
             d = json.loads(msg.data)
         except ValueError:
+            return
+        if on_shutdown_flag(self, d):
             return
         self.step = int(d.get("step_index", self.step))
         if self.mode == "source":
@@ -151,14 +154,7 @@ class LoadGen(Node):
 
 def main():
     rclpy.init()
-    node = LoadGen()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.try_shutdown()
+    run_spin(LoadGen())
 
 
 if __name__ == "__main__":

@@ -1,11 +1,20 @@
-# Ramp schedule for the coordinator. Edit and pass with:
-#   ros2 launch net_loadtest loadtest.launch.py role:=coordinator \
-#       --ros-args --params-file $(ros2 pkg prefix net_loadtest)/share/net_loadtest/config/ramp.yaml
-# steps_mbps is offered load PER SOURCE. With N agents converging on one sink,
-# aggregate offered at step k ~= N * steps_mbps[k]. The sink's port is 2.5G, so
-# it saturates when N * target approaches ~2500 Mbps -- watch loss_pct there.
+# Ramp schedule for ramp_controller. NOTE: `ros2 launch ... --params-file` does
+# NOT reach nodes -- pass these with `ros2 run net_loadtest ramp_controller
+# --ros-args --params-file <this>` (or -p key:=val directly).
+#
+# steps_mbps = offered load PER SOURCE. With N agents converging on one sink,
+# aggregate offered at step k ~= N * steps_mbps[k]; the sink port is 2.5G, so it
+# saturates when N * target passes ~2500 -- watch wire loss_pct there.
+#
+# payload_bytes: load_gen is timer-capped at max_rate_hz(=5000), so per-source
+# throughput ceiling = max_rate_hz * payload * 8. 4096B -> only ~164 Mbps/source
+# (targets above that do nothing). 65536B -> ~2.6 Gbps/source ceiling, so high
+# targets actually take effect. Raise payload, not rate.
 ramp_controller:
   ros__parameters:
-    steps_mbps: [10.0, 25.0, 50.0, 100.0, 200.0, 400.0, 800.0]
-    payload_bytes: 4096
+    steps_mbps: [400.0, 600.0, 800.0, 1000.0, 1200.0, 1600.0]
+    payload_bytes: 65536
     hold_sec: 20.0
+    # loop: true              # 무한 반복(Ctrl-C 종료)
+    # shutdown_when_done: true # 램프 1회 후 전 노드 자동 종료(원샷)
+    # grace_sec: 3.0

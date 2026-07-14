@@ -18,6 +18,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 from net_loadtest.rates import classify
+from net_loadtest.runner import on_shutdown_flag, spin as run_spin
 from net_loadtest.web_ui import PAGE
 
 
@@ -118,12 +119,19 @@ class WebMonitor(Node):
         self.nic = {}  # (host,iface) -> row
         self.create_subscription(String, "/loadtest/summary", self._on_summary, 10)
         self.create_subscription(String, "/loadtest/nic", self._on_nic, 50)
+        self.create_subscription(String, "/loadtest/step", self._on_step, 10)
 
         self.server = _Server((bind, port), history)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.get_logger().info(
             "dashboard on http://{}:{}/  (open in a browser; `sudo ufw allow {}` "
             "if firewalled)".format(bind, port, port))
+
+    def _on_step(self, msg):
+        try:
+            on_shutdown_flag(self, json.loads(msg.data))
+        except ValueError:
+            pass
 
     def _on_nic(self, msg):
         try:
@@ -166,14 +174,7 @@ class WebMonitor(Node):
 
 def main():
     rclpy.init()
-    node = WebMonitor()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.try_shutdown()
+    run_spin(WebMonitor())
 
 
 if __name__ == "__main__":

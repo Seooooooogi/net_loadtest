@@ -27,6 +27,7 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, HistoryPolicy
 from std_msgs.msg import String
 
 from net_loadtest.rates import rate_hz
+from net_loadtest.runner import on_shutdown_flag, spin as run_spin
 
 
 class ExtSource(Node):
@@ -64,6 +65,8 @@ class ExtSource(Node):
         except ValueError:
             return
         self._kill()
+        if on_shutdown_flag(self, d):
+            return
         target = float(d.get("target_mbps", 0.0))
         if target <= 0 or not self.cmd:
             return
@@ -88,14 +91,7 @@ class ExtSource(Node):
 
 def main():
     rclpy.init()
-    node = ExtSource()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.try_shutdown()
+    run_spin(ExtSource())
 
 
 if __name__ == "__main__":

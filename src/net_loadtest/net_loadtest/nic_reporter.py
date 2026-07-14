@@ -13,6 +13,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 from net_loadtest.rates import bps, counter_rate
+from net_loadtest.runner import on_shutdown_flag, spin as run_spin
 
 _FIELDS = ("rx_bytes", "tx_bytes", "rx_packets", "tx_packets",
            "rx_dropped", "tx_dropped")
@@ -53,9 +54,12 @@ class NicReporter(Node):
 
     def _on_step(self, msg):
         try:
-            self.step = int(json.loads(msg.data).get("step_index", -1))
-        except (ValueError, KeyError):
-            pass
+            d = json.loads(msg.data)
+        except ValueError:
+            return
+        if on_shutdown_flag(self, d):
+            return
+        self.step = int(d.get("step_index", -1))
 
     def _tick(self):
         now = time.monotonic()
@@ -81,14 +85,7 @@ class NicReporter(Node):
 
 def main():
     rclpy.init()
-    node = NicReporter()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.try_shutdown()
+    run_spin(NicReporter())
 
 
 if __name__ == "__main__":

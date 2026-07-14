@@ -21,6 +21,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 from net_loadtest.rates import loss_bps, loss_pct
+from net_loadtest.runner import on_shutdown_flag, spin as run_spin
 
 _PORT_COLS = ["ts", "step", "target_mbps", "host", "iface",
               "rx_bps", "tx_bps", "rx_pps", "tx_pps", "rx_drop", "tx_drop"]
@@ -62,10 +63,12 @@ class Aggregator(Node):
     def _on_step(self, msg):
         try:
             d = json.loads(msg.data)
-            self.step = int(d.get("step_index", -1))
-            self.target_mbps = float(d.get("target_mbps", 0.0))
-        except (ValueError, KeyError):
-            pass
+        except ValueError:
+            return
+        if on_shutdown_flag(self, d):
+            return
+        self.step = int(d.get("step_index", -1))
+        self.target_mbps = float(d.get("target_mbps", 0.0))
 
     def _on_nic(self, msg):
         try:
@@ -133,14 +136,7 @@ class Aggregator(Node):
 
 def main():
     rclpy.init()
-    node = Aggregator()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.try_shutdown()
+    run_spin(Aggregator())
 
 
 if __name__ == "__main__":
