@@ -32,17 +32,63 @@ source ~/.bashrc                                        # FastDDS whitelist/RMW 
 #   옵션: --iface enp3s0 | --ip-only | --dds-only | -y(확인 생략)
 ```
 
-역할별 실행(요약):
+## 부하 테스트 실행 (5대 예시)
+
+5포트 스위치 = **4대 source → 1대 sink 수렴**(논블로킹 스위치에서 한계가 드러나는 패턴), 코디네이터는
+sink 호스트에 co-locate. 5포트 전부 `nic_reporter` 로 측정된다.
+
+| 호스트 | setup 스크립트 x → IP | 역할 |
+|---|---|---|
+| host1 | 1 → 10.10.0.1 | **sink + coordinator**(ramp·집계·웹) |
+| host2~5 | 2~5 | agent(source) |
+
+각 호스트 준비 = 위 Quick start 1~2 (clone/build + `setup-closed-net.sh <x> --iface <iface>`). 추가로 5대 모두
+같은 `ROS_DOMAIN_ID` + 유선 iface 이름·2.5G 확인:
 
 ```bash
-# sink 1대
-ros2 launch net_loadtest loadtest.launch.py role:=sink iface:=<iface>
-# 각 조 호스트 (source)
-ros2 launch net_loadtest loadtest.launch.py role:=agent iface:=<iface>
-# 코디네이터 1대 (ramp + 집계 + 웹 대시보드 http://<ip>:8088/)
-ros2 launch net_loadtest loadtest.launch.py role:=coordinator \
-  --ros-args --params-file $(ros2 pkg prefix net_loadtest)/share/net_loadtest/config/ramp.yaml
+ip -br link                              # iface 이름 (호스트마다 다를 수 있음)
+sudo ethtool <iface> | grep Speed        # 기대: 2500Mb/s (1G면 그 포트가 병목)
+echo 'export ROS_DOMAIN_ID=42' >> ~/.bashrc && source ~/.bashrc   # 5대 동일, 타 강의실과 겹치지 않게
 ```
+
+**(선택·권장) iperf3 baseline** — DDS 전에 raw 링크 상한 확인(DDS 오버헤드 = iperf3 − ROS2 delivered):
+
+```bash
+./src/net_loadtest/scripts/iperf3_baseline.sh server                 # host1(sink)
+./src/net_loadtest/scripts/iperf3_baseline.sh client 10.10.0.1 <iface>  # 각 agent
+```
+
+**실행 순서가 중요** — sink → agents(대기) → coordinator(마지막에 램프 시작). 각 명령은 별도 터미널(또는 `&`):
+
+```bash
+# [host1] sink (수신 + nic_reporter)
+ros2 launch net_loadtest loadtest.launch.py role:=sink iface:=<iface>
+
+# [host2~5] agent (source + nic_reporter) — 4대 모두. step 오기 전엔 idle.
+ros2 launch net_loadtest loadtest.launch.py role:=agent iface:=<iface>
+
+# [host1] coordinator — 마지막에. 여기서 램프 시작.
+ros2 run net_loadtest aggregator &
+ros2 run net_loadtest web_monitor &
+ros2 run net_loadtest ramp_controller --ros-args \
+  -p "steps_mbps:=[50.0,100.0,200.0,400.0,600.0,800.0]" \
+  -p payload_bytes:=4096 -p hold_sec:=20.0
+```
+
+> **램프 상단을 800까지 두는 이유**: sink 포트 = 2.5 Gbps. 소스 4대 × per-source 목표가 스위치로 몰림
+> → 200·400·800·1600·2400·**3200** Mbps. 2500 을 넘기는 600~800 구간에서 **`loss_pct`·`queueing_p95` 가
+> 0 에서 치솟는 지점 = 스위치 감당 한계**. (`role:=coordinator` launch 는 기본 램프가 400 까지라 4소스로는
+> 포화가 안 나므로, 위처럼 `ramp_controller` 를 직접 실행해 상단을 높인다.)
+
+**모니터링:**
+
+```bash
+http://10.10.0.1:8088/                 # 브라우저(코디네이터=host1). 방화벽 시 host1: sudo ufw allow 8088
+ros2 topic echo /loadtest/summary      # 또는 터미널 라이브 요약
+```
+
+결과 CSV(host1): `~/loadtest_runs/loadtest_<타임스탬프>_summary.csv` (스텝별 bps·손실·지연).
+멈출 땐 각 호스트 Ctrl-C (coordinator background 는 `kill %1 %2`).
 
 파라미터·토폴로지·결과 해석("스위치가 몇 bps 감당?")은 → **[src/net_loadtest/README.md](src/net_loadtest/README.md)**.
 
