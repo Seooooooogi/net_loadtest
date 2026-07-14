@@ -1,0 +1,19 @@
+# colcon build artifacts (regenerable)
+build/
+install/
+log/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# test run outputs
+loadtest_runs/
+*.csv
+
+# editor / os
+.vscode/
+.idea/
+*.swp
+.DS_Store

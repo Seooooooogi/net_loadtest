@@ -1,0 +1,11 @@
+# Ramp schedule for the coordinator. Edit and pass with:
+#   ros2 launch net_loadtest loadtest.launch.py role:=coordinator \
+#       --ros-args --params-file $(ros2 pkg prefix net_loadtest)/share/net_loadtest/config/ramp.yaml
+# steps_mbps is offered load PER SOURCE. With N agents converging on one sink,
+# aggregate offered at step k ~= N * steps_mbps[k]. The sink's port is 2.5G, so
+# it saturates when N * target approaches ~2500 Mbps -- watch loss_pct there.
+ramp_controller:
+  ros__parameters:
+    steps_mbps: [10.0, 25.0, 50.0, 100.0, 200.0, 400.0, 800.0]
+    payload_bytes: 4096
+    hold_sec: 20.0
