@@ -40,6 +40,27 @@ ethtool <iface> | grep Speed        # 기대: 2500Mb/s
 sudo apt install chrony && chronyc tracking   # offset 확인
 ```
 
+#### 폐쇄망 IP + FastDDS whitelist 자동 설정 (TP-Link 실사용 편의)
+
+`scripts/setup-closed-net.sh` 가 위 1~2번을 자동화한다: 유선 NIC 고정 IP `10.10.0.<x>/24`
+(게이트웨이/DNS 없음·never-default → wifi 인터넷 경로 보호) + FastDDS `interfaceWhiteList`
+= `127.0.0.1` + `10.10.0.1..5` 허용(DDS 를 폐쇄망 NIC + loopback 에만 바인딩, docker0/tailscale0 등 차단).
+
+```bash
+# 각 호스트에서 자기 옥텟만 지정 (x = 1..5). 먼저 --dry-run 으로 확인 권장.
+scripts/setup-closed-net.sh 3 --dry-run
+scripts/setup-closed-net.sh 3            # 적용(확인 프롬프트), 새 터미널/ source ~/.bashrc 후 DDS 반영
+#   --iface enp3s0   NIC 지정   |   --ip-only / --dds-only   |   -y  확인 생략
+```
+
+> 이 스크립트는 **RMW 를 `rmw_fastrtps_cpp` 로 고정**한다(whitelist 는 FastDDS 기능). FastDDS 는
+> Humble 기본 RMW 지만, 이 프로젝트 호스트는 base 설치가 CycloneDDS 로 override 해둬서 명시 고정이
+> 필요(profiles 파일은 FastDDS 만 읽음). 기존 cyclonedds 블록보다 뒤에 와서 우선(스크립트가 감지·경고).
+> whitelist 는 동일 XML 을 5대 전부에 배포 가능 — `interfaceWhiteList` 는 로컬 인터페이스만 필터하므로
+> 각 호스트는 자기 IP + `127.0.0.1` 만 매칭. **loopback 포함 필수** — `useBuiltinTransports=false` 로
+> SHM 까지 꺼서, loopback 없으면 같은 호스트 노드(coordinator 의 aggregator/ramp/web, ros2 daemon/CLI)
+> 통신이 깨진다. (Fast DDS 3.x 는 `interfaces/allowlist` 로 개명 — XML 주석에 명시.)
+
 빌드:
 
 ```bash
