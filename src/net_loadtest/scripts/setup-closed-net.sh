@@ -185,8 +185,9 @@ EOF
         {
             echo "${BEGIN_MARK}"
             echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+            # Fast DDS <3.0 (Humble 2.6 / Jazzy 2.14) reads FASTRTPS_DEFAULT_PROFILES_FILE;
+            # v3.0 renamed it to FASTDDS_DEFAULT_PROFILES_FILE — add that only on Fast DDS 3.x.
             echo "export FASTRTPS_DEFAULT_PROFILES_FILE=\"${FASTDDS_XML}\""
-            echo "export FASTDDS_DEFAULT_PROFILES_FILE=\"${FASTDDS_XML}\""
             echo "${END_MARK}"
         } >> "${bashrc}"
     fi
