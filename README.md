@@ -71,14 +71,23 @@ ros2 launch net_loadtest loadtest.launch.py role:=agent iface:=<iface>
 ros2 run net_loadtest aggregator &
 ros2 run net_loadtest web_monitor &
 ros2 run net_loadtest ramp_controller --ros-args \
-  -p "steps_mbps:=[50.0,100.0,200.0,400.0,600.0,800.0]" \
-  -p payload_bytes:=4096 -p hold_sec:=20.0
+  -p "steps_mbps:=[400.0,600.0,800.0,1000.0,1200.0,1600.0]" \
+  -p payload_bytes:=65536 -p hold_sec:=20.0 \
+  -p shutdown_when_done:=true          # 마지막 스텝 후 전 노드 자동 종료(5대 수동 Ctrl-C 불필요)
 ```
 
-> **램프 상단을 800까지 두는 이유**: sink 포트 = 2.5 Gbps. 소스 4대 × per-source 목표가 스위치로 몰림
-> → 200·400·800·1600·2400·**3200** Mbps. 2500 을 넘기는 600~800 구간에서 **`loss_pct`·`queueing_p95` 가
-> 0 에서 치솟는 지점 = 스위치 감당 한계**. (`role:=coordinator` launch 는 기본 램프가 400 까지라 4소스로는
-> 포화가 안 나므로, 위처럼 `ramp_controller` 를 직접 실행해 상단을 높인다.)
+> **payload 를 64KB 로 키우는 이유(중요)**: `load_gen` 은 timer 기반이라 발행 rate 가 `max_rate_hz`(기본
+> 5000)에서 막힌다. 소스당 처리량 상한 = `max_rate_hz × payload × 8`. payload 4096B 면 소스당 **~164 Mbps**
+> 에서 잘려(target 을 아무리 올려도 무효), 4소스 집계가 ~0.7 Gbps 밖에 안 나온다. payload 65536B 면 상한이
+> `5000×65536×8 = 2.6 Gbps/소스` 로 올라가 target 1600 까지 도달, 4소스 집계가 2.5G 를 넘겨 스위치가 포화된다.
+>
+> **감당 한계 판독**: sink 포트 2.5 Gbps 는 per-source ~625(4×625=2500)에서 이미 넘는다. offered 를 올리며
+> **wire `loss_pct`(= Σtx−sink rx)가 0 에서 뜨는 지점 = 스위치 한계**. 단 Python `load_gen`/sink 가 먼저
+> CPU-cap 될 수 있어(소스 tx 가 target 에 못 미치거나 `gap_loss` 만 급증) — 그건 **생성기/sink 한계지 스위치
+> 한계가 아니다**. 순수 스위치 상한은 `iperf3` baseline(단일 흐름 ~2.38 Gbps)이 더 확실하다.
+>
+> **자동 종료 vs loop**: `shutdown_when_done:=true` = 램프 1회 후 전 노드 자동 종료(권장, 원샷 테스트).
+> `loop:=true` = 램프 무한 반복(Ctrl-C 종료). 둘 다 생략 시 = 마지막 스텝 후 idle 상태로 대기.
 
 **모니터링:**
 

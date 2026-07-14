@@ -89,17 +89,51 @@ ros2 launch net_loadtest loadtest.launch.py role:=sink iface:=<iface>
 # 각 조 호스트 (source)
 ros2 launch net_loadtest loadtest.launch.py role:=agent iface:=<iface>
 
-# 코디네이터 1대 (ramp + 집계) — 스케줄 조정
-ros2 launch net_loadtest loadtest.launch.py role:=coordinator \
-  --ros-args --params-file $(ros2 pkg prefix net_loadtest)/share/net_loadtest/config/ramp.yaml
+# 코디네이터 1대 (ramp + 집계 + 웹) — 기본 램프로 바로 실행
+ros2 launch net_loadtest loadtest.launch.py role:=coordinator
+# 램프 스케줄을 바꾸려면 노드를 직접 실행 (launch 는 params-file 을 노드로 전달하지 않음):
+#   ros2 run net_loadtest aggregator & ros2 run net_loadtest web_monitor &
+#   ros2 run net_loadtest ramp_controller --ros-args \
+#     -p "steps_mbps:=[50.0,100.0,200.0,400.0,600.0,800.0]" -p hold_sec:=20.0
 
 # 라이브 요약
 ros2 topic echo /loadtest/summary
 ```
 
-결과 CSV (`~/loadtest_runs/`, append-only, run 별 파일):
-- `loadtest_<ts>.csv` — 포트별 상세 (long format)
-- `loadtest_<ts>_summary.csv` — 스위치 집계 + 지연 시계열, 초당 1행 (**분석용 메인 테이블**)
+### 로그 (CSV) — 각 항목 설명
+
+`aggregator`(코디네이터)가 실행 내내 `~/loadtest_runs/` 에 **append-only, run 별 타임스탬프 파일** 2개를
+기록한다(매 행 flush → Ctrl-C 해도 직전까지 유실 없음). 로그는 코디네이터 호스트 한 곳에 모인다.
+
+**`loadtest_<ts>.csv` — 포트별 상세** (한 행 = 한 포트의 한 샘플, nic_reporter 원본):
+
+| 컬럼 | 단위 | 뜻 |
+|---|---|---|
+| `ts` | epoch 초 | 샘플 시각 |
+| `step` | 정수 | 램프 단계 인덱스(0부터). `-1` = 램프 시작 전 |
+| `target_mbps` | Mbps | 그 단계의 **소스 1대당** offered 목표 |
+| `host` / `iface` | — | 보고 호스트 / NIC (= 스위치 포트 식별) |
+| `rx_bps` / `tx_bps` | **bits/s** | 그 포트 수신/송신 **wire** 속도(헤더·RTPS 포함) |
+| `rx_pps` / `tx_pps` | packets/s | 초당 패킷 수 |
+| `rx_drop` / `tx_drop` | 개수 | 그 간격에 **NIC(호스트)** 가 버린 패킷(수신 호스트가 못 따라감) |
+
+**`loadtest_<ts>_summary.csv` — 스위치 집계 + 지연** (초당 1행, **분석용 메인 테이블**):
+
+| 컬럼 | 단위 | 뜻 |
+|---|---|---|
+| `ts` / `step` / `target_mbps` | — | 위와 동일(target 은 소스 1대당) |
+| `ports` | 개수 | 집계에 들어온 포트 수(= nic_reporter 도는 호스트 수) |
+| `switch_ingress_mbps` | Mbps | **Σ 모든 포트 tx** = 스위치로 들어간 총량(offered) |
+| `switch_egress_mbps` | Mbps | **Σ 모든 포트 rx** = 스위치가 내보낸 총량(delivered) |
+| `loss_mbps` / `loss_pct` | Mbps / % | `ingress − egress` = **스위치/수신단 드롭**. 0 = 무손실 |
+| `max_port_mbps` | Mbps | 가장 바쁜 단일 포트(보통 sink). 2.5G 근접 = 포트 포화 |
+| `nic_rx_drops` | 개수 | 전 포트 NIC rx drop 합 |
+| `lat_p50_ms` / `lat_p95_ms` / `lat_max_ms` | ms | sink one-way 지연 분위수 / 최대 |
+| `queueing_p95_ms` | ms | `p95 − 최소관측` = **버퍼 큐잉 지연**(클럭 오프셋 상쇄, NTP 미동기여도 유효) |
+| `gap_loss` | 개수 | **앱 레벨** 손실(소스별 seq 결번 누적) |
+
+> 단위 주의: **포트별 CSV 는 bps(bits/s), 요약 CSV 는 Mbps** (`mbps = bps / 1e6`). 라이브로는
+> `ros2 topic echo /loadtest/summary` 또는 웹 대시보드가 같은 값을 보여준다.
 
 ### 웹 대시보드 (실시간 모니터링)
 
@@ -148,6 +182,33 @@ perf_test 미설치면 ext_source 가 설치 안내 후 해당 step 을 skip(비
   ① sink 포트 2.5G line-rate, ② 8 Mbit 버퍼(버스트 many-to-one 시 드롭), ③ IGMP snooping /
   DDS 멀티캐스트 discovery 플러딩(도메인 ID 분리 한계와 직결).
 - 5포트 = 스위치 1대당 최대 5호스트. 강의실 전체는 스위치 다단 → 스위치별로 이 리그 반복.
+
+### 분석 방법 (summary CSV)
+
+목표 = **감당 한계 = offered(`switch_ingress_mbps`)를 올릴 때 손실/지연이 꺾이는 지점** 찾기.
+
+1. **스텝별 요약**: `step` 으로 group → 스텝마다 평균 offered(`switch_ingress_mbps`)·`loss_pct`·
+   `queueing_p95_ms`·`gap_loss`·`max_port_mbps`.
+2. **한계 = `loss_pct` 가 0 → 양수로 처음 뜨는 스텝**(또는 `queueing_p95_ms` 급등 / `gap_loss` 증가 시작).
+   그 **직전 스텝의 offered = 무손실로 감당한 최대 bps**.
+3. **드롭 위치 구분**: `loss_mbps`(=ingress−egress, wire)와 `gap_loss`(앱)가 함께 오르면 스위치가 흘리는 것,
+   `nic_rx_drops` 만 오르면 수신 호스트가 못 따라가는 것(sink CPU/버퍼). `max_port_mbps` 가 2.5G 에
+   붙었으면 sink 포트 line-rate 포화.
+
+```python
+import pandas as pd
+d = pd.read_csv("loadtest_<ts>_summary.csv")
+g = d.groupby("step").agg(offered=("switch_ingress_mbps","mean"),
+                          delivered=("switch_egress_mbps","mean"),
+                          loss_pct=("loss_pct","max"),
+                          q95_ms=("queueing_p95_ms","max"),
+                          gap=("gap_loss","max")).reset_index()
+print(g)
+limit = g.loc[g.loss_pct < 0.5, "offered"].max()   # 임계 0.5% 예시
+print("무손실 감당 한계 ≈ %.0f Mbps" % limit)
+```
+
+포트별 상세 CSV 는 `groupby(["host","iface"])` 로 각 포트 기여도·느린(1G) 포트 탐지에 쓴다.
 
 ## 기존 도구와의 관계 (하이브리드)
 
