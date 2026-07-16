@@ -17,10 +17,7 @@ source ~/.bashrc                                        # FastDDS whitelist/RMW 
 #   옵션: --iface enp3s0 | --ip-only | --dds-only | -y(확인 생략)
 ```
 
-## 부하 테스트 실행 (5대 예시)
-
-5포트 스위치 = **4대 source → 1대 sink 수렴**(논블로킹 스위치에서 한계가 드러나는 패턴), 코디네이터는
-sink 호스트에 co-locate. 5포트 전부 `nic_reporter` 로 측정된다.
+## 부하 테스트 실행
 
 | 호스트 | setup 스크립트 x → IP | 역할 |
 |---|---|---|
